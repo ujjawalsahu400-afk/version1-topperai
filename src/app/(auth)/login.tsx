@@ -197,26 +197,6 @@ export default function LoginScreen() {
     );
   }
 
-  const handleGoogleLogin = async () => {
-    try {
-      setLoading(true);
-      const { createdSessionId, setActive: setSSOActive } = await startSSOFlow({
-        strategy: "oauth_google",
-        redirectUrl: Linking.createURL("/(app)/home", { scheme: "topperai" }),
-      });
-
-      if (createdSessionId && setSSOActive) {
-        await setSSOActive({ session: createdSessionId });
-        router.replace("/(app)/(tabs)");
-      }
-    } catch (err: any) {
-      console.error("Google Login Error:", err);
-      Alert.alert("Login Failed", "Could not sign in with Google.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <SafeAreaView className="flex-1 bg-white dark:bg-slate-900">
       <KeyboardAvoidingView
