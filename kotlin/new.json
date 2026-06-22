@@ -1,0 +1,6 @@
+"android": {
+"package": "com.ujjawal.topperai"
+},
+"ios": {
+"bundleIdentifier": "com.ujjawal.topperai"
+}
