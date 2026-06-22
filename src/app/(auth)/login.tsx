@@ -1,8 +1,8 @@
-import React, { useState } from "react";
-import { View, Text, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert } from "react-native";
+import React, { useState, useRef } from "react";
+import { View, Text, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert, TextInput, Keyboard } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Mail, CheckCircle2, Circle } from "lucide-react-native";
+import { Mail, CheckCircle2, Circle, ArrowRight, Lock } from "lucide-react-native";
 import { useSignIn, useSSO } from "@clerk/clerk-expo";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { validateEmail, validatePassword } from "@/utils/validation";
 import { useAuthStore } from "@/store/authStore";
 import { useWarmUpBrowser } from "@/hooks/useWarmUpBrowser";
+import { cn } from "@/utils/cn";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -29,6 +30,11 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+
+  // Device Trust / MFA Step State
+  const [verifyingDevice, setVerifyingDevice] = useState(false);
+  const [code, setCode] = useState(["", "", "", "", "", ""]);
+  const inputs = useRef<TextInput[]>([]);
 
   const handleLogin = async () => {
     if (!isLoaded) return;
@@ -52,8 +58,13 @@ export default function LoginScreen() {
       if (result.status === "complete") {
         await setActive({ session: result.createdSessionId });
         router.replace("/(app)/(tabs)");
+      } else if (result.status === "needs_client_trust") {
+        // Device is unrecognized, Clerk needs to "trust" it via email code
+        await signIn.prepareFirstFactor({ strategy: "email_code" });
+        setVerifyingDevice(true);
       } else {
         console.log("Login status:", result.status);
+        Alert.alert("Login Incomplete", `Status: ${result.status}. Please contact support.`);
       }
     } catch (err: any) {
       setErrors({ email: err.errors?.[0]?.message || "Login failed" });
@@ -61,6 +72,130 @@ export default function LoginScreen() {
       setLoading(false);
     }
   };
+
+  const handleVerifyDevice = async () => {
+    if (!isLoaded) return;
+    const verificationCode = code.join("");
+    if (verificationCode.length < 6) return;
+
+    setLoading(true);
+    try {
+      const result = await signIn.attemptFirstFactor({
+        strategy: "email_code",
+        code: verificationCode,
+      });
+
+      if (result.status === "complete") {
+        await setActive({ session: result.createdSessionId });
+        router.replace("/(app)/(tabs)");
+      } else {
+        Alert.alert("Verification Failed", "Please check the code and try again.");
+      }
+    } catch (err: any) {
+      Alert.alert("Error", err.errors?.[0]?.message || "Verification failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOtpChange = (value: string, index: number) => {
+    const newCode = [...code];
+    newCode[index] = value;
+    setCode(newCode);
+
+    if (value && index < 5) {
+      inputs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleKeyPress = (e: any, index: number) => {
+    if (e.nativeEvent.key === 'Backspace' && !code[index] && index > 0) {
+      inputs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      setLoading(true);
+      const { createdSessionId, setActive: setSSOActive } = await startSSOFlow({
+        strategy: "oauth_google",
+        redirectUrl: Linking.createURL("/(app)/home", { scheme: "topperai" }),
+      });
+
+      if (createdSessionId && setSSOActive) {
+        await setSSOActive({ session: createdSessionId });
+        router.replace("/(app)/(tabs)");
+      }
+    } catch (err: any) {
+      console.error("Google Login Error:", err);
+      Alert.alert("Login Failed", "Could not sign in with Google.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (verifyingDevice) {
+    return (
+      <SafeAreaView className="flex-1 bg-white dark:bg-slate-900">
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }} className="px-8">
+          <AuthHeader
+            title="Verify Device"
+            subtitle="Enter the code sent to your email to trust this device"
+            onBack={() => setVerifyingDevice(false)}
+          />
+
+          <View className="items-center py-6">
+            <View className="w-20 h-20 bg-primary/10 rounded-full items-center justify-center mb-8">
+              <Lock size={40} color="#208AEF" />
+            </View>
+
+            <Text className="text-slate-500 dark:text-slate-400 text-center text-base leading-6 px-6 mb-8">
+              Clerk has detected a new device. Please enter the 6-digit verification code sent to your inbox.
+            </Text>
+
+            <View className="flex-row justify-between w-full mb-6">
+              {code.map((digit, index) => (
+                <TextInput
+                  key={index}
+                  ref={(el) => (inputs.current[index] = el!)}
+                  className={cn(
+                    "w-12 h-14 bg-slate-50 dark:bg-slate-800/50 border-2 rounded-xl text-center text-xl font-bold text-slate-900 dark:text-white",
+                    digit ? "border-primary" : "border-slate-200 dark:border-slate-800"
+                  )}
+                  keyboardType="number-pad"
+                  maxLength={1}
+                  value={digit}
+                  onChangeText={(value) => handleOtpChange(value, index)}
+                  onKeyPress={(e) => handleKeyPress(e, index)}
+                />
+              ))}
+            </View>
+
+            <Button
+              title="Verify & Sign In"
+              onPress={handleVerifyDevice}
+              isLoading={isLoading}
+              className="w-full"
+              icon={<ArrowRight size={20} color="white" />}
+              iconPosition="right"
+            />
+
+            <TouchableOpacity
+              onPress={async () => {
+                await signIn?.prepareFirstFactor({ strategy: "email_code" });
+                Alert.alert("Success", "Code resent.");
+              }}
+              className="mt-8"
+            >
+              <Text className="text-slate-500 dark:text-slate-400 font-medium">
+                Didn't receive a code? <Text className="text-primary font-bold">Resend</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   const handleGoogleLogin = async () => {
     try {

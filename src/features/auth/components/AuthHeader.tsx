@@ -7,9 +7,10 @@ interface AuthHeaderProps {
   title: string;
   subtitle?: string;
   showBack?: boolean;
+  onBack?: () => void;
 }
 
-export const AuthHeader = ({ title, subtitle, showBack = true }: AuthHeaderProps) => {
+export const AuthHeader = ({ title, subtitle, showBack = true, onBack }: AuthHeaderProps) => {
   const router = useRouter();
 
   return (
@@ -17,7 +18,7 @@ export const AuthHeader = ({ title, subtitle, showBack = true }: AuthHeaderProps
       <View className="flex-row items-center justify-between mb-8">
         {showBack ? (
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={onBack || (() => router.back())}
             className="w-12 h-12 items-center justify-center rounded-2xl border border-slate-100 dark:border-slate-800"
           >
             <ChevronLeft size={24} color="#64748B" />

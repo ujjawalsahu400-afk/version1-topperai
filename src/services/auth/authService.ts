@@ -1,10 +1,10 @@
-import { profileService } from "./profileService";
+import { profileService } from "@/services/profile/profileService";
 
 // This service wraps Clerk and Firestore operations
 export const authService = {
   async handlePostSignup(uid: string, userData: any) {
     try {
-      await profileService.createProfile(uid, {
+      await profileService.createProfile(uid, uid, {
         email: userData.email,
         name: userData.name,
         userId: userData.userId,

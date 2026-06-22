@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { View, Text, Animated } from "react-native";
 import { GraduationCap } from "lucide-react-native";
 import { useRouter } from "expo-router";
-import { useAuthStore } from "@/store/useAuthStore";
+import { useAuthStore } from "@/store/authStore";
 
 export default function SplashScreen() {
   const router = useRouter();
